@@ -5,8 +5,9 @@ import os
 
 # ================= 配置区域 =================
 # 读取 GitHub 的保密配置
-# 从环境变量获取 Key 字符串 (SCT_A,SCT_B,SCT_C)
 KEYS_STR = os.getenv("SERVERCHAN_KEY", "")
+# 【新增】读取 DeepSeek 的 API Key
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 
 TARGETS = {
     "美股纳指": {"code": "gb_ixic", "type": "us"},
@@ -66,8 +67,7 @@ def get_sina_data(targets):
                 else:
                     icon, sign = "⚪", ""
 
-                # --- 【排版优化】改为清单格式 ---
-                # 汇率不需要显示涨跌幅，其他需要
+                # --- 排版优化 ---
                 if name == "美元/人民币":
                      line = f"{icon} **{name}**: {price:.4f}"
                 else:
@@ -89,20 +89,59 @@ def get_sina_data(targets):
     time_str = datetime.datetime.now().strftime("%m-%d %H:%M")
     title = f"盘前: {main_title_info}"
     
-    # 使用 \n\n 强制换行，让手机显示更舒服
     content = f"📅 {time_str}\n\n" + "\n\n".join(results)
     
     return title, content
 
+# ================= 新增：大模型“狗屁分析”大脑 =================
+def get_ai_analysis(market_data):
+    if not DEEPSEEK_API_KEY:
+        return "⚠️ 未配置 DEEPSEEK_API_KEY，跳过 AI 分析。"
+
+    url = "https://api.deepseek.com/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+    }
+
+    # 这里的 Prompt 就是所谓的 Vibe-coding 灵魂
+    prompt = f"""
+    你是一位华尔街资深量化对冲基金经理。请根据以下我抓取的最新的全球市场盘前数据，
+    写一段60字左右的晨间市场情绪总结和宏观风险提示。
+    要求：语气冷酷、专业、充满华尔街精英感，直接给结论，不要废话，不要免责声明。
+    
+    【盘前数据】
+    {market_data}
+    """
+
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": "你是一个无情的宏观交易分析机器。"},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7, # 稍微加点温度，让“狗屁分析”更具玄学色彩
+        "max_tokens": 150
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        response.raise_for_status()
+        ai_text = response.json()['choices'][0]['message']['content'].strip()
+        return f"🤖 **【Agent 晨间研判】**\n\n{ai_text}"
+    except Exception as e:
+        return f"🤖 AI 分析生成失败: {str(e)}"
+
+# ==============================================================
+
 def push_to_wechat(title, content):
     if not KEYS_STR:
-        print("⚠️ 未配置 Key")
+        print("⚠️ 未配置 Server酱 Key")
         return
     
-    # 【核心修改】分割 Key 并循环发送
     keys = KEYS_STR.split(",")
     for key in keys:
-        key = key.strip() # 去除可能误填的空格
+        key = key.strip()
         if not key: continue
         
         url = f"https://sctapi.ftqq.com/{key}.send"
@@ -114,9 +153,20 @@ def push_to_wechat(title, content):
             print(f"❌ 推送失败 ({key[-4:]}): {e}")
 
 if __name__ == "__main__":
+    # 1. 抓取数据
     title, content = get_sina_data(TARGETS)
+    
+    # 2. 调用大模型大脑进行分析
+    print("⏳ 正在请求 DeepSeek 大脑进行推演...")
+    ai_analysis = get_ai_analysis(content)
+    
+    # 3. 拼装最终推文
+    final_content = f"{content}\n\n---\n\n{ai_analysis}"
+
     print("--- 预览 ---")
     print(title)
-    print(content)
+    print(final_content)
     print("-----------")
-    push_to_wechat(title, content)
+    
+    # 4. 推送
+    push_to_wechat(title, final_content)
