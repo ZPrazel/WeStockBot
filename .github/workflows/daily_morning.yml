@@ -26,5 +26,6 @@ jobs:
         env:
           # 会去读配置的保险箱
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }} #
           TZ: Asia/Shanghai
         run: python main.py
