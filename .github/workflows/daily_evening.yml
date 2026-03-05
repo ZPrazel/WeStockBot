@@ -26,5 +26,6 @@ jobs:
         env:
           # 
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }} #
           TZ: Asia/Shanghai
         run: python evening_push.py
